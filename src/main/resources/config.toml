@@ -1,0 +1,8 @@
+[target-server]
+    server = "myserver"
+    max-players = 10
+
+[queue]
+    server = "queue"
+    skip-permission = "my.skip.permission"
+    update-interval-seconds = 2
