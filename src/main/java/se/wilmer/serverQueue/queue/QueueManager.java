@@ -12,7 +12,7 @@ public class QueueManager {
     private final QueueNotifier queueNotifier;
     private final QueueTransfer queueTransfer;
     private final QueueSelector queueSelector;
-    private final Queue<UUID> queue = new LinkedList<>();
+    private final ArrayDeque<UUID> queue = new ArrayDeque<>();
     private final long maxPlayers;
     private final String skipQueuePermission;
     private final long queueUpdateIntervalSeconds;
@@ -30,11 +30,11 @@ public class QueueManager {
     }
 
     public void startQueue() {
-        plugin.getServer().getScheduler().buildTask(plugin, () -> {
+        plugin.getServer().getScheduler().buildTask(plugin, () -> plugin.getTargetServer().ping().thenAcceptAsync(ping -> {
             queueSelector.selectQueuedPlayers();
             queueTransfer.transferFailedPlayers();
             queueNotifier.notifyPlayerPositions();
-        }).repeat(queueUpdateIntervalSeconds, TimeUnit.SECONDS).schedule();
+        })).repeat(queueUpdateIntervalSeconds, TimeUnit.SECONDS).schedule();
     }
 
     public void addToQueue(Player player) {
@@ -50,7 +50,7 @@ public class QueueManager {
         queue.remove(uuid);
     }
 
-    public Queue<UUID> getQueue() {
+    public ArrayDeque<UUID> getQueue() {
         return queue;
     }
 

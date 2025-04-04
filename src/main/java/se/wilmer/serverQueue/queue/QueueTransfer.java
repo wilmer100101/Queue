@@ -1,11 +1,13 @@
 package se.wilmer.serverQueue.queue;
 
+import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.text.Component;
 import se.wilmer.serverQueue.ServerQueue;
 
+import java.sql.Connection;
 import java.util.*;
 
 public class QueueTransfer {
@@ -23,17 +25,27 @@ public class QueueTransfer {
         final UUID uuid = player.getUniqueId();
         final RegisteredServer targetServer = plugin.getTargetServer();
 
+        if (reconnectingPlayers.contains(uuid)) {
+            return;
+        }
+
         reconnectingPlayerAttempts.merge(uuid, 1, Integer::sum);
         reconnectingPlayers.add(uuid);
 
-        boolean success = player.createConnectionRequest(targetServer).connectWithIndication().join();
-        if (success) {
-            plugin.getLogger().info("Successfully transfer player: {}", player.getUsername());
-            reconnectingPlayerAttempts.remove(uuid);
-        } else {
-            plugin.getLogger().warn("Failed to transfer player: {}", player.getUsername());
-        }
-        reconnectingPlayers.remove(uuid);
+        player.createConnectionRequest(targetServer).connect()
+                .thenAccept((result) -> {
+                    if (result.isSuccessful()) {
+                        plugin.getLogger().info("Successfully transfer player: {}", player.getUsername());
+                        reconnectingPlayerAttempts.remove(uuid);
+                    }
+
+                    reconnectingPlayers.remove(uuid);
+                }).exceptionally(expectation -> {
+                    plugin.getLogger().warn("Failed to transfer player: {}, exception: {}", player.getUsername(), expectation);
+
+                    reconnectingPlayers.remove(uuid);
+                    return null;
+                });
     }
 
     public void transferFailedPlayers() {
@@ -42,14 +54,6 @@ public class QueueTransfer {
         List<UUID> playersToTransfer = new ArrayList<>();
         List<UUID> playersToRemove = new ArrayList<>();
         reconnectingPlayerAttempts.forEach((uuid, attempts) -> {
-            if (reconnectingPlayers.contains(uuid)) {
-                return;
-            }
-
-            if (attempts > MAX_RECONNECTING_ATTEMPTS) {
-                playersToRemove.add(uuid);
-            }
-
             Optional<Player> optionalPlayer = server.getPlayer(uuid);
             if (optionalPlayer.isEmpty()) {
                 reconnectingPlayers.remove(uuid);
@@ -57,10 +61,20 @@ public class QueueTransfer {
                 return;
             }
 
+            Player player = optionalPlayer.get();
+            if (plugin.getTargetServer().getPlayersConnected().contains(player)) {
+                reconnectingPlayers.remove(uuid);
+                playersToRemove.add(uuid);
+                return;
+            }
+
+            if (attempts > MAX_RECONNECTING_ATTEMPTS) {
+                playersToRemove.add(uuid);
+                return;
+            }
+
             playersToTransfer.add(uuid);
         });
-
-        playersToTransfer.forEach(uuid -> server.getPlayer(uuid).ifPresent(this::transferPlayer));
 
         playersToRemove.forEach(uuid -> {
             server.getPlayer(uuid).ifPresent(player -> player.disconnect(Component.text("We could not connect you to the target server. Please try again later.")));
@@ -68,6 +82,9 @@ public class QueueTransfer {
 
             reconnectingPlayerAttempts.remove(uuid);
         });
+
+        playersToTransfer.forEach(uuid -> server.getPlayer(uuid).ifPresent(this::transferPlayer));
+
     }
 
 }

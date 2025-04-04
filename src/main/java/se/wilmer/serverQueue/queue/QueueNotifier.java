@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.TextColor;
 import org.jetbrains.annotations.Nullable;
 import se.wilmer.serverQueue.ServerQueue;
 
+import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.UUID;
 
@@ -21,7 +22,7 @@ public class QueueNotifier {
     public void notifyPlayerPositions() {
         final ProxyServer proxyServer = plugin.getServer();
 
-        final Queue<UUID> queue = queueManager.getQueue();
+        final ArrayDeque<UUID> queue = queueManager.getQueue().clone();
         int queueSize = queue.size();
         int position = 0;
         for (UUID uuid : queue) {
