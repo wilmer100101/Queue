@@ -5,6 +5,7 @@ import com.velocitypowered.api.proxy.server.ServerPing;
 import se.wilmer.serverQueue.ServerQueue;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class QueueSelector {
     private final ServerQueue plugin;
@@ -16,20 +17,21 @@ public class QueueSelector {
     }
 
     public void selectQueuedPlayers() {
-        final long amount = getEmptyPlayerSlots();
-        final ProxyServer server = plugin.getServer();
+        getEmptyPlayerSlots().thenAccept(amount -> {
+            final ProxyServer server = plugin.getServer();
 
-        for (int i = 0; i < amount; i++) {
-            final UUID uuid = queueManager.getQueue().poll();
-            if (uuid == null) {
-                break;
+            for (int i = 0; i < amount; i++) {
+                final UUID uuid = queueManager.getQueue().poll();
+                if (uuid == null) {
+                    break;
+                }
+
+                server.getPlayer(uuid).ifPresent(player -> queueManager.getQueueTransfer().transferPlayer(player));
             }
-
-            server.getPlayer(uuid).ifPresent(player -> queueManager.getQueueTransfer().transferPlayer(player));
-        }
+        });
     }
 
-    private long getEmptyPlayerSlots() {
+    private CompletableFuture<Long> getEmptyPlayerSlots() {
         return plugin.getTargetServer().ping()
                 .thenApply(pingedServer -> {
                     final Optional<ServerPing.Players> optionalPlayers = pingedServer.getPlayers();
@@ -42,6 +44,6 @@ public class QueueSelector {
                 .exceptionally(exception -> {
                     plugin.getLogger().warn("Failed to fetch the target servers empty slots", exception);
                     return 0L;
-                }).join();
+                });
     }
 }
